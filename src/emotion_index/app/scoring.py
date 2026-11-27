@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-from emotion_index.domain.market import Market, MarketPost
+from emotion_index.domain.market import Market, MarketPost, MarketWeights
 from emotion_index.domain.models import ObservationWindow, SocialPost
 from emotion_index.integrations.capture import utc_now
 from emotion_index.integrations.deepseek_client import (
@@ -24,6 +24,74 @@ from emotion_index.sources.filter import route_market_post, select_market_posts
 DEFAULT_DAILY_LIMIT = 100
 DEEPSEEK_MODE = "DEEPSEEK"
 QUOTA_UNAVAILABLE = "DEEPSEEK_DAILY_QUOTA_EXHAUSTED_OR_ALREADY_SUBMITTED"
+
+
+def _rank_key(item: MarketPost) -> tuple[float, float, str, str]:
+    return (
+        -post_engagement_weight(item.post),
+        -item.post.published_at.timestamp(),
+        item.post.platform,
+        item.post.post_id,
+    )
+
+
+def _active_platform_weights(platforms: set[str], weights: MarketWeights) -> dict[str, float]:
+    automatic = [(name, weight) for name, weight in weights.automatic if name in platforms]
+    auto_total = sum(weight for _, weight in automatic)
+    has_xhs = "xhs" in platforms
+    auto_share = 1.0 - weights.xhs_weight if has_xhs else 1.0
+    effective = {name: weight / auto_total * auto_share for name, weight in automatic} if auto_total else {}
+    if has_xhs:
+        effective["xhs"] = weights.xhs_weight if automatic else 1.0
+    return effective
+
+
+def _select_top_posts(
+    posts: tuple[MarketPost, ...], weights: MarketWeights, daily_limit: int,
+) -> tuple[MarketPost, ...]:
+    """Allocate daily_limit across active platforms by effective weight so zero-engagement RSS feeds are not starved."""
+    if len(posts) <= daily_limit:
+        return tuple(sorted(posts, key=_rank_key))
+
+    groups: dict[str, list[MarketPost]] = {}
+    for item in posts:
+        groups.setdefault(item.post.platform.lower(), []).append(item)
+    for items in groups.values():
+        items.sort(key=_rank_key)
+
+    effective = _active_platform_weights(set(groups), weights)
+    quotas = {platform: 0 for platform in groups}
+    active = set(groups)
+    remaining = daily_limit
+    while remaining > 0 and active:
+        total_weight = sum(effective[platform] for platform in active)
+        exact = {platform: remaining * (effective[platform] / total_weight) for platform in active}
+        allocated = 0
+        for platform in list(active):
+            capacity = len(groups[platform]) - quotas[platform]
+            take = min(capacity, int(exact[platform]))
+            quotas[platform] += take
+            allocated += take
+            if quotas[platform] == len(groups[platform]):
+                active.remove(platform)
+        remaining -= allocated
+        if remaining > 0 and allocated == 0:
+            order = sorted(
+                active,
+                key=lambda platform: (
+                    -(exact[platform] - int(exact[platform])),
+                    -effective[platform],
+                    _rank_key(groups[platform][quotas[platform]]),
+                ),
+            )
+            for platform in order[:remaining]:
+                quotas[platform] += 1
+                remaining -= 1
+                if quotas[platform] == len(groups[platform]):
+                    active.remove(platform)
+
+    chosen = [item for platform, count in quotas.items() for item in groups[platform][:count]]
+    return tuple(sorted(chosen, key=_rank_key))
 
 
 def _deduplicate(posts: tuple[SocialPost, ...]) -> tuple[SocialPost, ...]:
@@ -116,14 +184,10 @@ def score_market(
     )
     unique_posts = _deduplicate(posts)
     audit = select_market_posts(window, tuple(route_market_post(post, sectors) for post in unique_posts), weights)
-    ranked = sorted(
-        audit.eligible_posts,
-        key=lambda item: (-post_engagement_weight(item.post), -item.post.published_at.timestamp(),
-                          item.post.platform, item.post.post_id),
-    )
+    chosen = _select_top_posts(audit.eligible_posts, weights, daily_limit)
     selected: list[tuple[MarketPost, str]] = []
     requests: dict[str, tuple[str, str]] = {}
-    for item in ranked[:daily_limit]:
+    for item in chosen:
         platform, text = item.post.platform, normalize_text(item.post.text)
         key = content_hash(platform, text)
         selected.append((item, key))
@@ -145,7 +209,8 @@ def score_market(
             "routed_sector": item.sector.value,
             "scoring_mode": DEEPSEEK_MODE if score is not None else LEXICON_MODE,
             "cache_hit": key in cache_hits, "polarity": sentiment.polarity,
-            "emotion_state": sentiment.emotion_state, "sector": sentiment.sector,
+            "emotion_state": sentiment.emotion_state.value,
+            "sector": sentiment.sector.value if sentiment.sector is not None else None,
             "is_sarcasm": sentiment.is_sarcasm, "confidence": sentiment.confidence,
             "reason_short": sentiment.reason_short,
         })
@@ -158,10 +223,10 @@ def score_market(
         "audit": {
             "scoring_mode": mode, "model_name": MODEL_NAME, "prompt_version": PROMPT_VERSION,
             "lexicon_model": LEXICON_MODEL if degraded else None,
-            "fallback_reason": unavailable, "daily_limit": daily_limit, "eligible_posts": len(ranked),
+            "fallback_reason": unavailable, "daily_limit": daily_limit, "eligible_posts": len(audit.eligible_posts),
             "alert_flags": ["DEEPSEEK_FALLBACK"] if degraded and unavailable != QUOTA_UNAVAILABLE else [],
             "allow_peak": allow_peak,
-            "selected_posts": len(selected), "unselected_posts": len(ranked) - len(selected),
+            "selected_posts": len(selected), "unselected_posts": len(audit.eligible_posts) - len(selected),
             "cache_hits": sum(record["cache_hit"] for record in records), "submitted_texts": submitted,
             "degraded_posts": degraded, "late_unavailable_count": audit.late_unavailable_count,
             "out_of_window_count": audit.out_of_window_count, "duplicate_posts": len(posts) - len(unique_posts),

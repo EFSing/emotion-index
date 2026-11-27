@@ -25,7 +25,13 @@
 - **原子冻结与故障隔离**：`emotion-index capture --market US|CN` 仅采集与冻结原始字节（零 DeepSeek 调用），按 `.runtime/data/raw/<market>/<platform>/<UTC日期>.json` 原子落盘并校验 SHA-256 与 `fetched_at`/`available_at`；单源失败不拖垮整轮，全失败平台不锁死当日重试机会。
 - **架构门禁强化**：`tests/test_architecture.py` 新增全仓库禁 `akshare` 导入与依赖声明门禁，并加强纯计算层禁系统时钟调用校验。
 
+## V2 PR-3：DeepSeek 谷值门禁打分、缓存与双语降级（已合入 `main`）
+
+- **谷值门禁与批量客户端**：新增 `src/emotion_index/integrations/deepseek_client.py`，强制北京时间工作日高峰拦截（支持 `--allow-peak` 与 `EMOTION_INDEX_DEEPSEEK_HOLIDAYS`），固定 `deepseek-chat` JSON 模式、20–30 条打包、严格 Schema 校验与最多 2 次重试。
+- **缓存、配额与降级**：新增 `integrations/score_cache.py`（SQLite 内容哈希持久化缓存 + 并发每日每市场 Top-100 配额预占）与纯内存 `sentiment/bilingual_lexicon.py`（`DEGRADED_LEXICON` 透明降级）。
+- **冻结快照解析与 `score` 子命令**：新增 `integrations/frozen_posts.py` 与 `app/scoring.py`，按平台有效权重分层精选 Top-N 帖子防止 RSS 源被高点赞源饿死，提供 `emotion-index score --market US|CN`。
+
 ## 待推进事项
 
 - V2 完整规格书见 [docs/SPEC_V2.md](SPEC_V2.md)。
-- 当前处于 **准备启动 PR-3（DeepSeek 谷值 5 折门禁客户端 + 内容哈希持久化缓存 + 中英双语词典降级 + `score` 子命令）** 状态。
+- 当前处于 **准备启动 PR-4（三轨中文 HTML 日报 + JSONL 历史账本 + `emotion_summary` 只读契约 + Google Drive 同步 + VPS 定时与邮件/Bark 通知）** 状态。

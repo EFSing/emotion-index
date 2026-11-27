@@ -373,3 +373,53 @@ class ScoringTests(unittest.TestCase):
             first, second = executor.map(reserve, (0, 4))
         self.assertEqual(len(first) + len(second), 10)
         self.assertFalse(set(first) & set(second))
+
+    def test_top_limit_stratifies_across_active_platforms_so_rss_is_not_starved(self):
+        # High-engagement Bluesky posts must not crowd out zero-engagement RSS feeds.
+        self.freeze("bluesky", ("tech_growth", CAPTURED, {
+            "posts": [self.bluesky(i, likes=500 + i) for i in range(60)],
+        }))
+        rss_items = "".join(
+            f"<item><title>news {i}</title><guid>n-{i}</guid><pubDate>Fri, 27 Nov 2026 07:{i:02d}:00 GMT</pubDate></item>"
+            for i in range(30)
+        )
+        self.freeze("chinese_news", ("wallstreetcn", CAPTURED,
+                                     f'<rss version="2.0"><channel>{rss_items}</channel></rss>'.encode()))
+        xueqiu_items = "".join(
+            f"<item><title>xq {i}</title><guid>x-{i}</guid><pubDate>Fri, 27 Nov 2026 07:{i:02d}:00 GMT</pubDate></item>"
+            for i in range(5)
+        )
+        self.freeze("xueqiu", ("xueqiu", CAPTURED,
+                               f'<rss version="2.0"><channel>{xueqiu_items}</channel></rss>'.encode()))
+
+        result = self.score(daily_limit=30)
+        self.assertEqual(result["audit"]["selected_posts"], 30)
+        counts = {}
+        for row in result["scores"]:
+            counts[row["platform"]] = counts.get(row["platform"], 0) + 1
+            self.assertIs(type(row["emotion_state"]), str)
+            self.assertIs(type(row["sector"]), str)
+        # xueqiu only has 5 posts; its unused 5 slots redistribute equally between bluesky and chinese_news.
+        self.assertEqual(counts["xueqiu"], 5)
+        self.assertGreaterEqual(counts["chinese_news"], 12)
+        self.assertGreaterEqual(counts["bluesky"], 12)
+        self.assertEqual(sum(counts.values()), 30)
+
+        # CN market with abundant high-like XHS posts must still keep automatic RSS sources in Top N.
+        self.freeze("xhs", ("cn.json", CAPTURED, {"market": "CN", "posts": [
+            {"post_id": f"xhs-{i}", "text": f"小红书观察 {i}", "likes": 1000 + i,
+             "published_at": (CAPTURED - timedelta(minutes=1)).isoformat()}
+            for i in range(40)
+        ]}), market=Market.CN)
+        cls_items = "".join(
+            f"<item><title>财联社快讯 {i}</title><guid>c-{i}</guid><pubDate>Fri, 27 Nov 2026 07:{i:02d}:00 GMT</pubDate></item>"
+            for i in range(30)
+        )
+        self.freeze("cls", ("cls", CAPTURED,
+                            f'<rss version="2.0"><channel>{cls_items}</channel></rss>'.encode()), market=Market.CN)
+        cn_result = self.score(Market.CN, daily_limit=20)
+        cn_counts = {}
+        for row in cn_result["scores"]:
+            cn_counts[row["platform"]] = cn_counts.get(row["platform"], 0) + 1
+        # CN XHS weight is 0.40 (8 of 20), leaving 60% (12 of 20) for cls.
+        self.assertEqual(cn_counts, {"xhs": 8, "cls": 12})
