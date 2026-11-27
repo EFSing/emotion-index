@@ -1,0 +1,59 @@
+{
+  "snapshot_id": "synthetic-us-2026-11-27-pre-open",
+  "market": "US",
+  "trading_date": "2026-11-27",
+  "session": "pre_open",
+  "window_start": "2026-11-26T21:00:00Z",
+  "cutoff_at": "2026-11-27T14:00:00Z",
+  "allowed_platforms": ["x", "reddit", "stocktwits"],
+  "posts": [
+    {
+      "platform": "reddit",
+      "post_id": "rd-1001",
+      "author_id": "trader_alpha",
+      "published_at": "2026-11-27T01:15:00Z",
+      "available_at": "2026-11-27T01:16:05Z",
+      "tickers": ["QQQ", "NVDA"],
+      "text": "Strong breakout and bullish momentum ahead of open, buying calls on dip",
+      "likes": 120,
+      "replies": 34,
+      "reposts": 15
+    },
+    {
+      "platform": "x",
+      "post_id": "x-2001",
+      "author_id": "macro_hawk",
+      "published_at": "2026-11-27T06:40:00Z",
+      "available_at": "2026-11-27T06:40:30Z",
+      "tickers": ["SPY", "QQQ"],
+      "text": "Market rally looks resilient, strong support holding with bullish breadth",
+      "likes": 85,
+      "replies": 12,
+      "reposts": 20
+    },
+    {
+      "platform": "stocktwits",
+      "post_id": "st-3001",
+      "author_id": "bear_watch",
+      "published_at": "2026-11-27T11:20:00Z",
+      "available_at": "2026-11-27T11:21:00Z",
+      "tickers": ["TSLA"],
+      "text": "Weak delivery rumor and bearish breakdown risk, cautious here",
+      "likes": 30,
+      "replies": 8,
+      "reposts": 3
+    },
+    {
+      "platform": "x",
+      "post_id": "x-2002-late",
+      "author_id": "late_scraper",
+      "published_at": "2026-11-27T13:50:00Z",
+      "available_at": "2026-11-27T14:25:00Z",
+      "tickers": ["SPY"],
+      "text": "Panic crash dump liquidating everything",
+      "likes": 500,
+      "replies": 200,
+      "reposts": 150
+    }
+  ]
+}
