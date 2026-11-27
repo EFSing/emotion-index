@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from emotion_index.domain.models import ObservationWindow, SocialPost, parse_utc_timestamp
 
@@ -41,23 +42,35 @@ def load_snapshot_fixture(path: Path) -> tuple[ObservationWindow, tuple[SocialPo
 
 
 def atomic_publish_html(target_path: Path, html_content: str) -> Path:
-    encoded = html_content.encode("utf-8")
-    digest = hashlib.sha256(encoded).hexdigest()
+    return atomic_publish_bytes(target_path, html_content.encode("utf-8"))
+
+
+def atomic_publish_bytes(target_path: Path, content: bytes) -> Path:
+    """Publish a complete file without ever replacing a frozen identity."""
     target_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if target_path.exists():
-        existing_digest = hashlib.sha256(target_path.read_bytes()).hexdigest()
-        if existing_digest == digest:
-            return target_path
-        raise FileExistsError(
-            f"Artifact identity conflict at {target_path}: existing SHA-256 {existing_digest} != new {digest}"
-        )
-
-    tmp_path = target_path.with_name(f".{target_path.name}.{os.getpid()}.tmp")
+    tmp_path = None
     try:
-        tmp_path.write_bytes(encoded)
-        os.replace(tmp_path, target_path)
+        with NamedTemporaryFile(dir=target_path.parent, prefix=f".{target_path.name}.", suffix=".tmp",
+                                delete=False) as stream:
+            tmp_path = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            if os.name == "nt":
+                # Windows rename rejects an existing destination. POSIX rename replaces it.
+                os.rename(tmp_path, target_path)
+            else:
+                os.link(tmp_path, target_path)
+        except FileExistsError:
+            existing = target_path.read_bytes()
+            if existing != content:
+                previous = hashlib.sha256(existing).hexdigest()
+                requested = hashlib.sha256(content).hexdigest()
+                raise FileExistsError(
+                    f"Artifact identity conflict at {target_path}: existing SHA-256 {previous} != new {requested}"
+                ) from None
     finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
     return target_path

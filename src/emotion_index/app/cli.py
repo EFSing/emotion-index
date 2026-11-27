@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from emotion_index.domain.market import Market
+from emotion_index.integrations.capture import capture_market
 from emotion_index.integrations.storage import atomic_publish_html, load_snapshot_fixture
 from emotion_index.reporting.html_report import render_html_report
 from emotion_index.research.summary import build_research_projection
@@ -39,10 +41,16 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(".runtime/artifacts/smoke"),
         help="Target directory for smoke HTML output",
     )
+    capture_parser = subparsers.add_parser("capture", help="Freeze public source responses for one market")
+    capture_parser.add_argument("--market", choices=[market.value for market in Market], required=True)
 
     args = parser.parse_args(argv)
     if args.command == "smoke":
         run_smoke(args.fixture, args.output_dir)
+        return 0
+    if args.command == "capture":
+        receipt = capture_market(Market(args.market))
+        print(receipt)
         return 0
     return 1
 

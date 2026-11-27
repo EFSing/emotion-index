@@ -58,3 +58,48 @@ export PYTHONDONTWRITEBYTECODE=1
 ```
 
 运行 `emotion-index smoke` 后，将在 `.runtime/artifacts/smoke/EMOTION_US_2026-11-27_pre_open.html` 生成自包含离线报告。相同输入与渲染版本重复执行将幂等复用同一产物。
+
+## 3. 采集公开源
+
+```powershell
+.\.venv\Scripts\emotion-index.exe capture --market US
+.\.venv\Scripts\emotion-index.exe capture --market CN
+```
+
+每轮采集输出一份 JSON 收据路径。收据按子源记录成功、限流、超时、鉴权失败、未配置和缺失等状态。原始响应保存在 `.runtime/data/raw/<market>/<platform>/<UTC 日期>.json`，解码每条 `payload_base64` 即可取得原始字节并核对 `sha256`。每条响应的 `fetched_at` 和 `available_at` 均为实际接收时刻。回放使用观察窗口的截止时刻筛选成功响应，再按帖子发布时间校验。已有平台日文件经校验后复用，响应内容、时间和失败记录随日文件保留。当天没有生成日文件的平台可以重新采集。
+
+### RSS 与盘面锚
+
+为各市场单独设置 `EMOTION_INDEX_RSS_<市场>_<路由>_URL`。自托管 RSSHub URL 可包含市场过滤参数。每条 URL 可选用同前缀的 `_COOKIE` 设置访问 RSSHub 的 Cookie。雪球上游会话由 RSSHub 实例自己的 `XUEQIU_COOKIES` 配置管理。
+
+| 路由变量名 | 市场 | URL 示例路径 |
+| --- | --- | --- |
+| `XUEQIU` | US、CN | `/xueqiu/hots` |
+| `XUEQIU_USER` | US、CN | `/xueqiu/user/<id>` |
+| `CLS` | US、CN | `/cls/telegraph` |
+| `WALLSTREETCN` | US、CN | `/wallstreetcn/news/global` |
+| `JIN10` | US、CN | `/jin10/telegraph` |
+| `SINA` | CN | `/sina/news/roll` |
+| `JISILU` | CN | 自托管实例中可用的免登集思录 RSS 路由 |
+
+美股盘面锚冻结 CNN 恐慌贪婪指数和 Yahoo Finance 日线，设置 `EMOTION_INDEX_FINNHUB_TOKEN` 后也尝试 Finnhub 新闻情绪。A 股盘面锚冻结腾讯财经的宽基和风格日线。每条行情请求独立记入收据。
+
+### 小红书 Inbox
+
+将合规导出的 UTF-8 JSON 文件放入 `.runtime/inbox/xhs/`。每个文件只包含一个市场，其他市场的采集会跳过该文件。如下为最小样例。
+
+```json
+{
+  "market": "CN",
+  "posts": [
+    {
+      "post_id": "example-1",
+      "published_at": "2026-11-27T06:00:00Z",
+      "text": "沪深300收盘观察",
+      "tickers": ["000300.SH"]
+    }
+  ]
+}
+```
+
+`published_at` 必须含时区。可选字段包括 `author_id`、`tickers`、`available_at` 和非负整数 `likes`、`replies`、`reposts`。实际导入时刻用于回放，文件中声明的 `available_at` 必须处于发布时间与导入时刻之间。缺失小红书样本时，收据标记 `XHS_NOT_PROVIDED`。
