@@ -19,7 +19,13 @@
 - **时点筛选与文本加权聚合**：扩展 `src/emotion_index/sources/filter.py`（板块路由、按市场与平台配置交集筛选）与 `src/emotion_index/sentiment/market.py`（缺源自动重归一化、小红书高权重 30%/40% 自动缩放与 `XHS_NOT_PROVIDED` / `XHS_NOT_SCORED` 标记）。
 - **三轨聚合与背离引擎**：新增 `src/emotion_index/research/three_track.py` 与 `tests/test_market_index.py`，实现近 20 日声量 Z-Score（含 `WARMUP` / `ZERO_VARIANCE`）、客观盘面锚时点接入与 4 条背离/极端警示规则。
 
+## V2 PR-2：免费公开数据源适配器与原始快照冻结（已合入 `main`）
+
+- **免费公开源与小红书插件位**：新增 `src/emotion_index/integrations/providers/`（`apewisdom.py`、`bluesky.py`、`stocktwits.py`、`rss_feeds.py`、`us_anchor.py`、`cn_anchor.py`、`xhs_inbox.py`、`http.py`）与 `integrations/capture.py`。
+- **原子冻结与故障隔离**：`emotion-index capture --market US|CN` 仅采集与冻结原始字节（零 DeepSeek 调用），按 `.runtime/data/raw/<market>/<platform>/<UTC日期>.json` 原子落盘并校验 SHA-256 与 `fetched_at`/`available_at`；单源失败不拖垮整轮，全失败平台不锁死当日重试机会。
+- **架构门禁强化**：`tests/test_architecture.py` 新增全仓库禁 `akshare` 导入与依赖声明门禁，并加强纯计算层禁系统时钟调用校验。
+
 ## 待推进事项
 
 - V2 完整规格书见 [docs/SPEC_V2.md](SPEC_V2.md)。
-- 当前处于 **准备启动 PR-2（免费公开数据源适配器，零 AKShare + 小红书标准 Inbox 插件位 + `capture` 子命令）** 状态。
+- 当前处于 **准备启动 PR-3（DeepSeek 谷值 5 折门禁客户端 + 内容哈希持久化缓存 + 中英双语词典降级 + `score` 子命令）** 状态。

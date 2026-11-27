@@ -135,8 +135,9 @@ def capture_market(
                      else tuple(feed.collect(now) for feed in inputs))
         entries = [_encode_response(response) for response in responses]
         summary["responses"] = _receipt_entries(entries)
+        successes = sum(response.reason is None for response in responses)
         observed = [response.fetched_at for response in responses if response.body is not None]
-        if observed:
+        if successes and observed:
             available_at = max(observed).isoformat()
             try:
                 _write_json(target, {
@@ -149,7 +150,6 @@ def capture_market(
                 summary.update(status="FAILED", reason="SNAPSHOT_WRITE_FAILED")
                 continue
             summary["snapshot"] = relative.as_posix()
-        successes = sum(response.reason is None for response in responses)
         summary["status"] = ("UNAVAILABLE" if not successes else
                              "CAPTURED" if successes == len(responses) else "PARTIAL")
 

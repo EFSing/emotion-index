@@ -59,7 +59,8 @@ def public_api_stub(request, timeout):
         symbol, period, _, _, count_ = parse_qs(url.query)["param"][0].split(",")
         if period != "day" or int(count_) <= 20:
             raise AssertionError("Tencent histories must include the prior trading sessions")
-        body = {"code": 0, "data": {symbol: {"day": [["2026-11-27", "1", "2", "2", "1", "100"]]}}}
+        key = "qfqday" if symbol in {"sh510880", "sh563300"} else "day"
+        body = {"code": 0, "data": {symbol: {key: [["2026-11-27", "1", "2", "2", "1", "100"]]}}}
         return response(json.dumps(body).encode())
     if url.netloc == "feeds.invalid":
         return response(ATOM if "jin10" in url.path else RSS)
@@ -147,8 +148,9 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(set(platforms), {"xueqiu", "cls", "chinese_news", "jisilu", "cn_anchor", "xhs"})
         self.assertEqual({row["source"] for row in platforms["cn_anchor"]["responses"]}, {
             "tencent:sh000001", "tencent:sh000300", "tencent:sz399006", "tencent:sh000688",
-            "tencent:sh512800", "tencent:sh000922", "tencent:sh932000",
+            "tencent:sh512800", "tencent:sh510880", "tencent:sh563300",
         })
+        self.assertEqual(platforms["cn_anchor"]["status"], "CAPTURED")
         rss_calls = [call.args[0].full_url for call in self.network.call_args_list if "feeds.invalid" in call.args[0].full_url]
         self.assertCountEqual(rss_calls, [f"https://feeds.invalid/cn/{name}" for name in names])
         self.assertFalse((self.runtime / "data" / "raw" / "US").exists())
@@ -175,15 +177,26 @@ class CaptureTests(unittest.TestCase):
 
         self.network.side_effect = failures
         us = self.platforms(self.capture())
+        self.assertEqual(us["apewisdom"]["status"], "UNAVAILABLE")
         self.assertEqual(us["apewisdom"]["responses"][0]["reason"], "RATE_LIMITED")
+        self.assertEqual(us["apewisdom"]["responses"][0]["http_status"], 429)
+        self.assertIsNone(us["apewisdom"]["snapshot"])
+        self.assertFalse(self.snapshot_path(Market.US, "apewisdom").exists())
         self.assertEqual(us["bluesky"]["responses"][0]["reason"], "TIMEOUT")
         self.assertEqual(us["stocktwits"]["status"], "PARTIAL")
         self.assertEqual(us["stocktwits"]["responses"][1]["reason"], "INVALID_RESPONSE")
+        self.assertEqual(len(load_available_responses(self.snapshot_path(Market.US, "stocktwits"), NOW)), 5)
         self.assertEqual(us["us_anchor"]["responses"][-1]["reason"], "SOURCE_NOT_CONFIGURED")
-        self.assertEqual(self.snapshot(Market.US, "apewisdom")["responses"][0]["http_status"], 429)
-        self.assertEqual(load_available_responses(self.snapshot_path(Market.US, "apewisdom"), NOW), ())
         self.assertFalse(self.snapshot_path(Market.US, "bluesky").exists())
 
+        # All-failed platforms are not frozen, so a retry after recovery succeeds.
+        self.network.side_effect = public_api_stub
+        retried = self.platforms(self.capture())
+        self.assertEqual(retried["apewisdom"]["status"], "CAPTURED")
+        self.assertEqual(retried["bluesky"]["status"], "CAPTURED")
+        self.assertEqual(retried["stocktwits"]["status"], "REUSED")
+
+        self.network.side_effect = failures
         cn = self.platforms(self.capture(Market.CN, env={
             "EMOTION_INDEX_RSS_CN_XUEQIU_URL": "https://feeds.invalid/cn/hots",
             "EMOTION_INDEX_RSS_CN_XUEQIU_COOKIE": "session=synthetic-cookie-secret",
@@ -197,6 +210,16 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(cn["cls"]["status"], "CAPTURED")
         self.assertEqual(cn["chinese_news"]["responses"][1]["reason"], "INVALID_FEED")
         self.assertFalse(self.snapshot_path(Market.CN, "xueqiu").exists())
+
+        # Short cookie flags (e.g. xq_is_login=1) must not trigger false-positive credential reflection.
+        self.network.side_effect = public_api_stub
+        recovered_cn = self.platforms(self.capture(Market.CN, env={
+            "EMOTION_INDEX_RSS_CN_XUEQIU_URL": "https://feeds.invalid/cn/xueqiu",
+            "EMOTION_INDEX_RSS_CN_XUEQIU_COOKIE": "xq_is_login=1; session=synthetic-cookie-secret",
+        }))
+        self.assertEqual(recovered_cn["xueqiu"]["status"], "PARTIAL")
+        self.assertIsNone(recovered_cn["xueqiu"]["responses"][0]["reason"])
+        self.assertTrue(self.snapshot_path(Market.CN, "xueqiu").exists())
 
     def test_xhs_import_market_isolation_and_point_in_time_gate(self):
         published = NOW - timedelta(hours=1)
@@ -228,6 +251,20 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(audit.late_unavailable_count, 1)
         us = self.platforms(self.capture(Market.US))["xhs"]
         self.assertEqual([row["source"] for row in us["responses"] if row["reason"] is None], ["us.json"])
+
+        # An invalid XHS-only inbox must not lock the day snapshot; fixing it allows capture on retry.
+        (self.runtime / "inbox" / "xhs" / "bad_only.json").unlink(missing_ok=True)
+        for item in (self.runtime / "inbox" / "xhs").iterdir():
+            item.unlink()
+        self.snapshot_path(Market.US, "xhs").unlink()
+        self.inbox("broken.json", "US", [{**good, "published_at": (NOW + timedelta(minutes=1)).isoformat()}])
+        failed_xhs = self.platforms(self.capture(Market.US))["xhs"]
+        self.assertEqual(failed_xhs["status"], "UNAVAILABLE")
+        self.assertFalse(self.snapshot_path(Market.US, "xhs").exists())
+        self.inbox("broken.json", "US", [{**good, "post_id": "us-fixed", "tickers": ["SPY"]}])
+        fixed_xhs = self.platforms(self.capture(Market.US))["xhs"]
+        self.assertEqual(fixed_xhs["status"], "CAPTURED")
+        self.assertTrue(self.snapshot_path(Market.US, "xhs").exists())
 
     def test_repeat_preserves_original_and_corruption_is_visible(self):
         self.capture()

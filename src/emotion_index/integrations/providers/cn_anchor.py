@@ -6,15 +6,16 @@ from urllib.parse import urlencode
 
 from emotion_index.integrations.providers.http import Feed
 
-# Broad indices, tech growth, cyclicals/finance proxy, dividend and high beta.
-SYMBOLS = ("sh000001", "sh000300", "sz399006", "sh000688", "sh512800", "sh000922", "sh932000")
+# Broad indices, tech growth, cyclicals/finance proxy, dividend ETF and high-beta small-cap ETF.
+SYMBOLS = ("sh000001", "sh000300", "sz399006", "sh000688", "sh512800", "sh510880", "sh563300")
 
 
 def _validate(symbol: str, body: bytes) -> str | None:
     payload = json.loads(body)
     if payload.get("code") != 0 or not payload.get("data"):
         return "ANCHOR_DATA_UNAVAILABLE"
-    if not payload["data"].get(symbol, {}).get("day"):
+    series = payload["data"].get(symbol, {})
+    if not (isinstance(series, dict) and (series.get("day") or series.get("qfqday"))):
         return "ANCHOR_DATA_UNAVAILABLE"
     return None
 

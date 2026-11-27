@@ -98,8 +98,10 @@ class Feed:
                 secrets.extend(part.partition("=")[2].strip() for part in value.split(";"))
             else:
                 secrets.append(value)
-        return any(secret and (secret.encode() in body or quote(secret, safe="").encode() in body)
-                   for secret in secrets)
+        return any(
+            len(secret) >= 8 and (secret.encode() in body or quote(secret, safe="").encode() in body)
+            for secret in secrets
+        )
 
 
 def json_list(field: str) -> Callable[[bytes], None]:
