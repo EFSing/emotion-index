@@ -15,6 +15,5 @@
 
 ## 待决策事项
 
-1. **目标市场与首批数据源范围**：确定优先覆盖美股（如 X/Twitter、Reddit `r/wallstreetbets`、StockTwits）还是 A 股（如雪球、东财股吧、微博），或双市场分池隔离。
-2. **采集与点时留证方式**：确定采用定时 API 轮询落地 `.runtime/data/raw/` 原始带收据快照，还是接入现有上游数据管线。
-3. **情绪打分模型选型**：V1 骨架内置了基于词典与互动权重对数折算的基线规则打分器（`lexicon_engagement_v1`）；后续可在 `sentiment` 层按版本扩展金融领域微调模型（如 FinBERT）或结构化 LLM 打分协议。
+- V2 核心业务口径、数据源清单、DeepSeek 谷值省钱规则、Google Drive 归档与 PR-1 → PR-4 拆分均已拍板冻结，详见 [docs/SPEC_V2.md](SPEC_V2.md)。
+- 当前处于 **等待启动 PR-1 编码** 状态（未写入 V2 业务代码）。

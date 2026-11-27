@@ -6,11 +6,12 @@
 - **本地唯一路径**：`D:\ChatGPT\projects\emotion-index`
 - **远端仓库**：`https://github.com/EFSing/emotion-index.git`
 - **默认主分支**：`main`
-- **当前语义阶段**：`V1_PROJECT_BOOTSTRAP`（防乱工程底座、7 层单向架构骨架、时点防泄漏契约、离线冒烟流水线与 CI 已就绪）
+- **当前语义阶段**：`V2_SPEC_LOCKED_READY_FOR_PR1`（V1 防乱工程底座与 CI 已建立；V2 双市场三轨情绪指数任务书 [docs/SPEC_V2.md](docs/SPEC_V2.md) 已拍板冻结，尚未开始 V2 编码）
 - **动态 Git / GitHub 状态**：`EXTERNAL_VERIFY_REQUIRED`（每次会话启动时通过 `git status -sb`、`git log -n 3` 及 GitHub Actions 页面实时核验）
 - **Next Action**：
-  1. 明确首批接入的社交媒体数据源（如 X/Twitter、Reddit `r/wallstreetbets` / `r/stocks`、雪球、东财股吧或 Truth Social 等）及采集方式（官方 API / RSS / 本地导入快照）。
-  2. 在 `integrations` 层定义首套真实数据源的只读原始快照与 `available_at` 收据格式。
+  1. 承接编码的模型请完整阅读 [AGENTS.md](AGENTS.md)、[docs/SPEC_V2.md](docs/SPEC_V2.md) 与 [tests/test_architecture.py](tests/test_architecture.py)。
+  2. 从 `main` 切出独立功能分支，按 [docs/SPEC_V2.md](docs/SPEC_V2.md) 第六节顺序启动 **PR-1（双市场核心契约 + 4 大板块 + 三轨聚合与背离引擎，纯内存全离线）**。
+  3. 严禁引入 `akshare`，每个 PR 均须保证 `python -m unittest discover -s tests -v` 与 `git diff --check` 全绿。
 
 ## 2. 合并基线与里程碑台账
 

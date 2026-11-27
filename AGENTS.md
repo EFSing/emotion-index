@@ -11,9 +11,10 @@
 - **开工必读顺序**：
   1. [AGENTS.md](AGENTS.md)
   2. [HANDOFF.md](HANDOFF.md)
-  3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-  4. [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)
-  5. [docs/DECISION_LOG.md](docs/DECISION_LOG.md)
+  3. [docs/SPEC_V2.md](docs/SPEC_V2.md)（已拍板的 V2 完整开发任务书与分阶段 PR 清单）
+  4. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+  5. [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)
+  6. [docs/DECISION_LOG.md](docs/DECISION_LOG.md)
 - **实时事实核验**：开工前先核对 `git status --short --branch`、`git remote -v`、当前分支及远端 GitHub Actions CI 状态。若文档记录与实际 Git/产物状态存在影响当前任务的语义矛盾，必须先标记 `PROJECT_GOVERNANCE_STATE_CONFLICT` 并依据可核验证据解决后再推进。
 
 ## 2. 架构与实现边界
@@ -24,7 +25,11 @@
   - 任何情绪指数计算或市场交易时段对齐都以决策截止时刻（`cutoff_at`）校验：`available_at <= cutoff_at` 且 `published_at <= available_at`。晚于截止时刻才可见的帖子、编辑或热度数据（如事后累计点赞/转发量）必须明确拒绝或打上 `POST_HOC_UNVERIFIED` 标记，严禁混入历史点时回放。
 - **工程复杂度预算（Complexity Budget）**：
   - 默认选择“最小正确实现”，避免为假设性需求提前引入多余抽象层、状态机或兼容包装。
-  - 强 fail-closed 防御重点用于防未来数据泄漏、防原始数据污染、不可逆产物写入与凭证安全。
+  - 强 fail-closed 防御重点用于防未来数据泄漏、防原始数据污染、不可逆产物写入、DeepSeek 高峰调用成本失控与凭证安全。
+- **依赖与合规红线**：
+  - **严禁引入 `akshare` 依赖**（已从生产体系淘汰）。
+  - **严禁编写任何验证码绕过、签名逆向硬破解或违规反爬对抗代码**；小红书仅通过标准化 `.runtime/inbox/xhs/` 或合规数据源插件位接入。
+  - DeepSeek API 客户端默认强制遵守**谷值 5 折窗口门禁**、内容哈希持久化缓存与每日条数硬配额。
 
 ## 3. 运行产物隔离与清理规范
 
