@@ -133,12 +133,28 @@ class PostSentiment:
     market_post: MarketPost
     polarity: float
     emotion_state: EmotionState
+    sector: Sector | None = None
+    is_sarcasm: bool | None = None
+    confidence: float | None = None
+    reason_short: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.polarity, bool) or not -1.0 <= self.polarity <= 1.0:
             raise ValueError("polarity must be between -1 and 1")
         if not isinstance(self.emotion_state, EmotionState):
             raise ValueError("invalid emotion_state")
+        if self.sector is not None and not isinstance(self.sector, Sector):
+            raise ValueError("invalid scoring sector")
+        if self.is_sarcasm is not None and type(self.is_sarcasm) is not bool:
+            raise ValueError("is_sarcasm must be a boolean")
+        if self.confidence is not None and (
+            type(self.confidence) not in (int, float) or not 0.0 <= self.confidence <= 1.0
+        ):
+            raise ValueError("confidence must be between 0 and 1")
+        if self.reason_short is not None and (
+            not isinstance(self.reason_short, str) or not self.reason_short.strip()
+        ):
+            raise ValueError("reason_short must be non-empty text")
 
 
 @dataclass(frozen=True)

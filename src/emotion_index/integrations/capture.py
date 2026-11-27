@@ -74,9 +74,16 @@ def load_available_responses(path: Path, cutoff_at: datetime) -> tuple[Response,
     """Verify raw bytes and return the successful observations available by the replay cutoff."""
     if cutoff_at.utcoffset() is None:
         raise ValueError("cutoff_at must be timezone-aware")
-    document = json.loads(path.read_bytes())
-    return tuple(response for response in _verified_payloads(document)
+    return tuple(response for response in load_frozen_responses(path)
                  if response.reason is None and response.fetched_at <= cutoff_at)
+
+
+def load_frozen_responses(path: Path, *, identity: dict | None = None) -> tuple[Response, ...]:
+    """Verify the frozen envelope and payload hashes before exposing any observations."""
+    document = json.loads(path.read_bytes())
+    if identity is not None and any(document[field] != value for field, value in identity.items()):
+        raise ValueError("frozen snapshot identity mismatch")
+    return tuple(_verified_payloads(document))
 
 
 def _existing_snapshot(target: Path, identity: dict) -> list[dict] | None:
