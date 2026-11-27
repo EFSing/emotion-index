@@ -31,7 +31,16 @@
 - **缓存、配额与降级**：新增 `integrations/score_cache.py`（SQLite 内容哈希持久化缓存 + 并发每日每市场 Top-100 配额预占）与纯内存 `sentiment/bilingual_lexicon.py`（`DEGRADED_LEXICON` 透明降级）。
 - **冻结快照解析与 `score` 子命令**：新增 `integrations/frozen_posts.py` 与 `app/scoring.py`，按平台有效权重分层精选 Top-N 帖子防止 RSS 源被高点赞源饿死，提供 `emotion-index score --market US|CN`。
 
-## 待推进事项
+## V2 PR-4：三轨中文日报、历史账本与 VPS 交付部署（已合入 `main`）
 
-- V2 完整规格书见 [docs/SPEC_V2.md](SPEC_V2.md)。
-- 当前处于 **准备启动 PR-4（三轨中文 HTML 日报 + JSONL 历史账本 + `emotion_summary` 只读契约 + Google Drive 同步 + VPS 定时与邮件/Bark 通知）** 状态。
+- **客观盘面情绪锚与端到端出报**：新增 `domain/anchor.py`、`integrations/frozen_anchors.py`、`research/market_anchor.py` 与 `app/daily_report.py`，提供 `emotion-index report --market US|CN` 端到端链路，支持两阶段原子发布与中断恢复，并接入 DeepSeek 板块分类结果。
+- **历史账本与自包含日报**：新增 `domain/ledger.py`、`integrations/ledger.py`（跨进程文件锁 + 按交易日幂等 JSONL 账本）与 `reporting/html_report.py` V2 三轨中文离线 HTML 日报（零外部资源、内联 SVG 趋势图、四大板块温度表、背离警示、JSON 审计区）及只读 `emotion_summary_<market>_<YYYY-MM-DD>.json` 契约。
+- **通知、归档与定时模板**：新增 `integrations/notifier.py`（SMTP 邮件 + Bark 4 类核心告警）、`integrations/gdrive_sync.py`（rclone 增量归档至 `EmotionIndex/` + 成功后 60 天本地 raw 清理）与 `deploy/systemd/` 定时服务模板及部署手册。
+
+## 当前所处阶段与待推进事项
+
+- **代码开发阶段已全部完成**：[docs/SPEC_V2.md](SPEC_V2.md) 规划的 PR-1 ～ PR-4 均已合入 `main`，全部离线单测与架构/防乱门禁全绿。
+- **下一步（尚未做实盘/线上联调）**：
+  1. 在 VPS 上配置 RSSHub（Docker）与未入库的 `/etc/emotion-index/emotion-index.env`（DeepSeek Key、RSS 路由、SMTP、Bark、rclone Google Drive）。
+  2. 执行真实外网连通性干跑（`capture` + `report --sync --dry-run`），检查实际抓包数据质量、HTML 日报视觉效果与同步路径。
+  3. 启用 `deploy/systemd/` 定时任务进入每日自动试运行。

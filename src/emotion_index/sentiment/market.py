@@ -79,6 +79,13 @@ def _summarize_text(
     )
 
 
+def _effective_sector(item: MarketPost, eligible_scores: dict[MarketPost, PostSentiment]) -> Sector:
+    score = eligible_scores.get(item)
+    if score is not None and score.sector is not None:
+        return score.sector
+    return item.sector
+
+
 def aggregate_market_text(
     audit: MarketSourceAudit, scores: tuple[PostSentiment, ...], weights: MarketWeights,
 ) -> MarketTextSnapshot:
@@ -101,7 +108,10 @@ def aggregate_market_text(
     buckets = (_summarize_text(Sector.BROAD_MARKET, audit.eligible_posts, eligible_scores, weights),)
     buckets += tuple(
         _summarize_text(
-            sector, tuple(item for item in audit.eligible_posts if item.sector == sector), eligible_scores, weights,
+            sector,
+            tuple(item for item in audit.eligible_posts if _effective_sector(item, eligible_scores) == sector),
+            eligible_scores,
+            weights,
         )
         for sector in Sector if sector != Sector.BROAD_MARKET
     )

@@ -225,6 +225,9 @@ class DailyReportTests(unittest.TestCase):
         self.assertEqual(us["divergence_flags"], [WEAK_MARKET, EUPHORIA])
         self.assertAlmostEqual(us["composite_score"], (95 + us["market_anchor"]["anchor_score"]) / 2)
         self.assertTrue(all(item["market_anchor"] is not None for item in us["sectors"].values()))
+        # DeepSeek sector classification populates TECH_GROWTH even when tickers only mention broad QQQ.
+        self.assertEqual(us["sectors"]["TECH_GROWTH"]["text_emotion_index"], 95)
+        self.assertEqual(us["sectors"]["TECH_GROWTH"]["scored_post_count"], 10)
         for code in (WEAK_MARKET, EUPHORIA, "VOLUME_SPIKE"):
             self.assertIn(code, us_html)
 
@@ -395,6 +398,45 @@ class DailyReportTests(unittest.TestCase):
         self.assertNotIn("<img", html)
         payload = html.split('type="application/json">', 1)[1].split("</script>", 1)[0]
         self.assertEqual(json.loads(payload), summary)
+
+    def test_yahoo_duplicate_same_day_timestamps_keep_latest_bar_and_recovered_xueqiu_clears_alert(self):
+        # Yahoo chart API often appends a second intraday/close timestamp for the latest session.
+        original_api = self.public_api
+
+        def api_with_dup_yahoo_and_recovered_xueqiu(request, timeout):
+            url = urlsplit(request.full_url)
+            if url.hostname == "query1.finance.yahoo.com":
+                symbol = unquote(url.path.rsplit("/", 1)[1])
+                days = (*prior_sessions(5), DAY)
+                prices = {"^VIX": 28, "SPY": 99, "QQQ": 98, "XLF": 99, "IWM": 98, "XLU": 101}
+                stamps = [datetime.combine(day, time(14, 30), timezone.utc).timestamp() for day in days]
+                stamps.append(datetime.combine(DAY, time(20, 0), timezone.utc).timestamp())
+                closes = [20 if symbol == "^VIX" else 100] * 5 + [prices[symbol] + 0.5, prices[symbol]]
+                return json_response({"chart": {"error": None, "result": [{
+                    "timestamp": stamps, "indicators": {"quote": [{"close": closes}]},
+                }]}})
+            if url.path == "/xueqiu":
+                xml = (
+                    f"<rss><channel><item><guid>xq-ok</guid><title>科技股反弹</title>"
+                    f"<pubDate>{(CN_CAPTURE - timedelta(minutes=20)).isoformat()}</pubDate>"
+                    "</item></channel></rss>"
+                )
+                stream = io.BytesIO(xml.encode())
+                stream.code = 200
+                return stream
+            return original_api(request, timeout)
+
+        # First CN capture gets Xueqiu 403; second CN capture recovers after cookie renewal.
+        self.capture(Market.CN, CN_CAPTURE)
+        self.provider.side_effect = api_with_dup_yahoo_and_recovered_xueqiu
+        self.capture(Market.CN, CN_CAPTURE + timedelta(minutes=2))
+        cn_summary = report_market(Market.CN, self.runtime).summary
+        self.assertNotIn(XUEQIU_UNAUTHORIZED, cn_summary["status_flags"])
+
+        self.capture(Market.US, US_CAPTURE)
+        us_summary = report_market(Market.US, self.runtime).summary
+        self.assertIsNotNone(us_summary["market_anchor"])
+        self.assertEqual(us_summary["audit"]["anchor"]["invalid_responses"], 0)
 
 
 class LedgerAndAnchorTests(unittest.TestCase):

@@ -25,10 +25,12 @@ def _number(value: object) -> float:
 def _yahoo(document: dict) -> tuple[DailyBar, ...]:
     result = document["chart"]["result"][0]
     quote = result["indicators"]["quote"][0]
-    return tuple(
-        DailyBar(datetime.fromtimestamp(stamp, timezone.utc).date(), _number(close), None)
-        for stamp, close in zip(result["timestamp"], quote["close"], strict=True) if close is not None
-    )
+    by_day: dict[date, DailyBar] = {}
+    for stamp, close in zip(result["timestamp"], quote["close"], strict=True):
+        if close is not None:
+            bar = DailyBar(datetime.fromtimestamp(stamp, timezone.utc).date(), _number(close), None)
+            by_day[bar.trading_date] = bar
+    return tuple(by_day[day] for day in sorted(by_day))
 
 
 def _tencent(document: dict, symbol: str) -> tuple[DailyBar, ...]:

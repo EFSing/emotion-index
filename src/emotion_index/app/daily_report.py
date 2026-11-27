@@ -61,9 +61,8 @@ def _build_summary(
     )
     text = aggregate_market_text(scored.audit, scored.sentiments, scored.weights)
     snapshot = build_market_snapshot(text, observations, anchors, volume_observed=volume_observed)
-    capture_flags = tuple(sorted({
-        flag for receipt in receipts if receipt.finished_at <= cutoff_at for flag in receipt.flags
-    }))
+    eligible_receipts = [receipt for receipt in receipts if receipt.finished_at <= cutoff_at]
+    capture_flags = eligible_receipts[-1].flags if eligible_receipts else ()
     audit_json = json.dumps({"scoring": scoring_audit, "anchor": anchor_audit}, allow_nan=False)
     return daily_summary(snapshot, history, audit_json, capture_flags)
 
