@@ -41,6 +41,11 @@ def classify_regime(emotion_index: float) -> EmotionRegime:
     return EmotionRegime.EXTREME_GREED
 
 
+def post_engagement_weight(post: SocialPost) -> float:
+    raw_engagement = post.likes + 2 * post.replies + 3 * post.reposts
+    return 1.0 + math.log1p(raw_engagement)
+
+
 def score_single_post(post: SocialPost) -> ScoredPost:
     tokens = [tok.lower() for tok in TOKEN_PATTERN.findall(post.text)]
     bullish_hits = tuple(sorted({tok for tok in tokens if tok in BULLISH_TERMS}))
@@ -53,8 +58,7 @@ def score_single_post(post: SocialPost) -> ScoredPost:
     else:
         polarity = (pos_count - neg_count) / total_hits
 
-    raw_engagement = post.likes + 2 * post.replies + 3 * post.reposts
-    engagement_weight = 1.0 + math.log1p(raw_engagement)
+    engagement_weight = post_engagement_weight(post)
     weighted_score = polarity * engagement_weight
     return ScoredPost(
         post=post,

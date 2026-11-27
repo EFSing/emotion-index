@@ -1,0 +1,16 @@
+{
+  "US": {
+    "BROAD_MARKET": ["SPY", "QQQ"],
+    "TECH_GROWTH": ["XLK", "SMH", "NVDA"],
+    "CYCLICAL_FINANCE": ["XLF", "XLI", "XLE"],
+    "DEFENSIVE_DIVIDEND": ["XLU", "XLP", "SCHD"],
+    "HIGH_BETA_THEME": ["IWM", "ARKK"]
+  },
+  "CN": {
+    "BROAD_MARKET": ["000001.SH", "000300.SH", "399006.SZ"],
+    "TECH_GROWTH": ["000688.SH", "588000.SH"],
+    "CYCLICAL_FINANCE": ["512800.SH", "512880.SH"],
+    "DEFENSIVE_DIVIDEND": ["000922.CSI", "510880.SH"],
+    "HIGH_BETA_THEME": ["932000.CSI", "563300.SH"]
+  }
+}

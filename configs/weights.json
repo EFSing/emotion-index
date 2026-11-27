@@ -1,0 +1,21 @@
+{
+  "US": {
+    "automatic": {
+      "apewisdom": 0.20,
+      "bluesky": 0.20,
+      "stocktwits": 0.20,
+      "xueqiu": 0.20,
+      "chinese_news": 0.20
+    },
+    "xhs_weight": 0.30
+  },
+  "CN": {
+    "automatic": {
+      "xueqiu": 0.35,
+      "cls": 0.35,
+      "chinese_news": 0.20,
+      "jisilu": 0.10
+    },
+    "xhs_weight": 0.40
+  }
+}

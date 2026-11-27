@@ -13,7 +13,13 @@
   - `tests/test_architecture.py` 静态校验 AST import 方向、无环拓扑、纯计算层禁用文件/网络 I/O 以及 Git 仓库零运行垃圾与零密钥泄漏。
   - `.github/workflows/ci.yml` 覆盖 Ubuntu（Python 3.12 / 3.13）与 Windows（Python 3.12）自动化测试及 `git diff --check`。
 
-## 待决策事项
+## V2 PR-1：双市场核心契约与三轨纯内存引擎（已合入 `main`）
 
-- V2 核心业务口径、数据源清单、DeepSeek 谷值省钱规则、Google Drive 归档与 PR-1 → PR-4 拆分均已拍板冻结，详见 [docs/SPEC_V2.md](SPEC_V2.md)。
-- 当前处于 **等待启动 PR-1 编码** 状态（未写入 V2 业务代码）。
+- **配置与领域契约**：新增 `configs/weights.json`、`configs/sectors.json` 与 `src/emotion_index/domain/market.py`，严格隔离 `US` / `CN` 双市场，固化 4 大对称风格板块、`EmotionState`、三轨输出与背离枚举。
+- **时点筛选与文本加权聚合**：扩展 `src/emotion_index/sources/filter.py`（板块路由、按市场与平台配置交集筛选）与 `src/emotion_index/sentiment/market.py`（缺源自动重归一化、小红书高权重 30%/40% 自动缩放与 `XHS_NOT_PROVIDED` / `XHS_NOT_SCORED` 标记）。
+- **三轨聚合与背离引擎**：新增 `src/emotion_index/research/three_track.py` 与 `tests/test_market_index.py`，实现近 20 日声量 Z-Score（含 `WARMUP` / `ZERO_VARIANCE`）、客观盘面锚时点接入与 4 条背离/极端警示规则。
+
+## 待推进事项
+
+- V2 完整规格书见 [docs/SPEC_V2.md](SPEC_V2.md)。
+- 当前处于 **准备启动 PR-2（免费公开数据源适配器，零 AKShare + 小红书标准 Inbox 插件位 + `capture` 子命令）** 状态。
