@@ -30,7 +30,7 @@ def load_market_config(market: Market) -> tuple[MarketWeights, MarketSectors]:
             MarketSectors.from_mapping(market, sectors))
 
 
-def latest_capture_date(raw_market: Path) -> date:
+def capture_dates(raw_market: Path) -> frozenset[date]:
     dates = []
     names = [path.stem for path in raw_market.glob("*/*.json")]
     names.extend(path.name for path in (raw_market / "_receipts").glob("*") if path.is_dir())
@@ -41,6 +41,11 @@ def latest_capture_date(raw_market: Path) -> date:
             continue
         if day.isoformat() == name:
             dates.append(day)
+    return frozenset(dates)
+
+
+def latest_capture_date(raw_market: Path) -> date:
+    dates = capture_dates(raw_market)
     if not dates:
         raise ValueError("该市场暂无冻结快照。请先运行 capture。")
     return max(dates)
@@ -81,6 +86,9 @@ def load_market_posts(
                 continue
             counts["parsed_posts"] += len(parsed)
             counts["invalid_rows"] += rejected
+            if parsed or not rejected:
+                observed_at = response.fetched_at.isoformat()
+                counts["first_usable_at"] = min(counts.get("first_usable_at", observed_at), observed_at)
             posts.extend(parsed)
     return tuple(posts), latest, diagnostics
 

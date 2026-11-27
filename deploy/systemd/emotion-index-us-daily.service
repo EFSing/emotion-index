@@ -1,0 +1,16 @@
+[Unit]
+Description=Capture, publish and deliver the US emotion index report
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=emotion-index
+Group=emotion-index
+WorkingDirectory=/opt/emotion-index
+EnvironmentFile=/etc/emotion-index/emotion-index.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+TimeoutStartSec=45min
+ExecStart=/usr/bin/flock /opt/emotion-index/.runtime/tmp/scheduled.lock /opt/emotion-index/.venv/bin/emotion-index capture --market US --current-session
+ExecStart=/usr/bin/flock /opt/emotion-index/.runtime/tmp/scheduled.lock /opt/emotion-index/.venv/bin/emotion-index report --market US --current-session --notify --sync --prune-raw

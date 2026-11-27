@@ -1,0 +1,10 @@
+[Unit]
+Description=Capture and publish the US emotion index at 17:30 New York time
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 17:30:00 America/New_York
+AccuracySec=1s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -103,3 +103,12 @@ export PYTHONDONTWRITEBYTECODE=1
 ```
 
 `published_at` 必须含时区。可选字段包括 `author_id`、`tickers`、`available_at` 和非负整数 `likes`、`replies`、`reposts`。实际导入时刻用于回放，文件中声明的 `available_at` 必须处于发布时间与导入时刻之间。缺失小红书样本时，收据标记 `XHS_NOT_PROVIDED`。
+
+## 4. 生成三轨日报
+
+```powershell
+.\.venv\Scripts\emotion-index.exe report --market US
+.\.venv\Scripts\emotion-index.exe report --market CN
+```
+
+`report` 读取冻结数据，复用 DeepSeek 缓存与词典降级，并在 `.runtime/artifacts/daily/` 发布中文 HTML 日报与只读摘要。用 `--capture-date` 指定历史采集日，用 `--cutoff-at` 指定回放截止时刻。定时出报、邮件、Bark、Google Drive 归档与 JSON 字段约定见 [VPS 部署说明](deploy/systemd/README.md)。

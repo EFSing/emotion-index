@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-from emotion_index.domain.market import Market, MarketPost, MarketWeights
+from emotion_index.domain.market import Market, MarketPost, MarketSourceAudit, MarketWeights, PostSentiment
 from emotion_index.domain.models import ObservationWindow, SocialPost
 from emotion_index.integrations.capture import utc_now
 from emotion_index.integrations.deepseek_client import (
@@ -157,12 +158,21 @@ def _deepseek_scores(
     return scores, frozenset(cache_hits), submitted, unavailable
 
 
-def score_market(
+@dataclass(frozen=True)
+class ScoreRun:
+    audit: MarketSourceAudit
+    weights: MarketWeights
+    sentiments: tuple[PostSentiment, ...]
+    document: dict
+
+
+def collect_market_scores(
     market: Market, runtime: Path = Path(".runtime"), *, capture_date: date | None = None,
     cutoff_at: datetime | None = None, window_start: datetime | None = None,
     daily_limit: int = DEFAULT_DAILY_LIMIT, allow_peak: bool = False,
-    client: DeepSeekClient | None = None,
-) -> dict:
+    client: DeepSeekClient | None = None, latest_observation: datetime | None = None,
+    session: str = "capture",
+) -> ScoreRun:
     if type(daily_limit) is not int or daily_limit <= 0:
         raise ValueError("--daily-limit 必须为正整数。")
     weights, sectors = load_market_config(market)
@@ -173,13 +183,14 @@ def score_market(
         raise ValueError("--capture-date 晚于当前 UTC 日期。")
     posts, latest, sources = load_market_posts(raw_market, market, day, weights.platforms)
     if cutoff_at is None:
-        cutoff_at = min(now, latest or datetime.combine(day, time.max, timezone.utc))
+        observed = [stamp for stamp in (latest, latest_observation) if stamp is not None]
+        cutoff_at = min(now, max(observed, default=datetime.combine(day, time.max, timezone.utc)))
     if cutoff_at.utcoffset() is None or cutoff_at > now:
         raise ValueError("--cutoff-at 必须带时区且不得晚于当前时间。")
     if window_start is None:
         window_start = cutoff_at - timedelta(days=1)
     window = ObservationWindow(
-        f"{market.value}-{day.isoformat()}", market.value, day.isoformat(), "capture",
+        f"{market.value}-{day.isoformat()}", market.value, day.isoformat(), session,
         window_start, cutoff_at, tuple(sorted(weights.platforms)),
     )
     unique_posts = _deduplicate(posts)
@@ -200,9 +211,11 @@ def score_market(
                 cache, client or DeepSeekClient(), market, requests, daily_limit, allow_peak,
             )
     records = []
+    sentiments = []
     for item, key in selected:
         score = scores.get(key)
         sentiment = score.for_post(item) if score is not None else score_post(item)
+        sentiments.append(sentiment)
         records.append({
             "platform": item.post.platform, "post_id": item.post.post_id,
             "published_at": item.post.published_at.isoformat(), "available_at": item.post.available_at.isoformat(),
@@ -216,7 +229,7 @@ def score_market(
         })
     degraded = sum(record["scoring_mode"] == LEXICON_MODE for record in records)
     mode = LEXICON_MODE if degraded else DEEPSEEK_MODE if records else "NO_POSTS"
-    return {
+    document = {
         "schema_version": 1, "market": market.value, "capture_date": day.isoformat(),
         "window_start": window.window_start.isoformat(), "cutoff_at": window.cutoff_at.isoformat(),
         "scoring_mode": mode, "scores": records,
@@ -233,3 +246,16 @@ def score_market(
             "sources": sources,
         },
     }
+    return ScoreRun(audit, weights, tuple(sentiments), document)
+
+
+def score_market(
+    market: Market, runtime: Path = Path(".runtime"), *, capture_date: date | None = None,
+    cutoff_at: datetime | None = None, window_start: datetime | None = None,
+    daily_limit: int = DEFAULT_DAILY_LIMIT, allow_peak: bool = False,
+    client: DeepSeekClient | None = None,
+) -> dict:
+    return collect_market_scores(
+        market, runtime, capture_date=capture_date, cutoff_at=cutoff_at, window_start=window_start,
+        daily_limit=daily_limit, allow_peak=allow_peak, client=client,
+    ).document

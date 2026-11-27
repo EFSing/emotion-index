@@ -42,6 +42,7 @@ class VolumeFlag(str, Enum):
     ZERO_VARIANCE = "ZERO_VARIANCE"
     VOLUME_SPIKE = "VOLUME_SPIKE"
     VOLUME_COLD = "VOLUME_COLD"
+    NO_SOURCE_DATA = "NO_SOURCE_DATA"
 
 
 class DivergenceFlag(str, Enum):

@@ -1,0 +1,15 @@
+[Unit]
+Description=Publish and deliver the CN emotion index report
+Wants=network-online.target
+After=network-online.target emotion-index-cn-capture.service
+
+[Service]
+Type=oneshot
+User=emotion-index
+Group=emotion-index
+WorkingDirectory=/opt/emotion-index
+EnvironmentFile=/etc/emotion-index/emotion-index.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+TimeoutStartSec=45min
+ExecStart=/usr/bin/flock /opt/emotion-index/.runtime/tmp/scheduled.lock /opt/emotion-index/.venv/bin/emotion-index report --market CN --current-session --notify --sync --prune-raw

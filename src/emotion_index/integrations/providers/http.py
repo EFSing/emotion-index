@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 MAX_BODY_BYTES = 8 * 1024 * 1024
 HTTP_TIMEOUT = 10
+XUEQIU_UNAUTHORIZED = "XUEQIU_COOKIE_EXPIRED_OR_UNAUTHORIZED"
 
 
 @dataclass(frozen=True)
@@ -74,7 +75,7 @@ class Feed:
         if status == 429:
             return "RATE_LIMITED"
         if self.xueqiu and status in {401, 403}:
-            return "XUEQIU_COOKIE_EXPIRED_OR_UNAUTHORIZED"
+            return XUEQIU_UNAUTHORIZED
         if 200 <= status < 300:
             try:
                 reason = self.validate(body)
@@ -87,7 +88,7 @@ class Feed:
             markers = (b"400016", b"cookie expired", b"invalid cookie", b"logging back into your account",
                        "Cookie 已失效".lower().encode(), "缺少雪球用户登录后的 Cookie".lower().encode())
             if any(marker in lower for marker in markers):
-                return "XUEQIU_COOKIE_EXPIRED_OR_UNAUTHORIZED"
+                return XUEQIU_UNAUTHORIZED
         return reason
 
     def _reflects_credentials(self, query: str, body: bytes) -> bool:

@@ -66,6 +66,8 @@ def build_market_snapshot(
     text: MarketTextSnapshot,
     history: tuple[VolumeObservation, ...] = (),
     anchors: tuple[MarketAnchor, ...] = (),
+    *,
+    volume_observed: bool = True,
 ) -> MarketSnapshot:
     """Build the three tracks from same-market, cutoff-eligible observations."""
     market = text.audit.market
@@ -91,7 +93,9 @@ def build_market_snapshot(
 
     readings: dict[Sector, ThreeTrackReading] = {}
     for bucket in text.buckets:
-        volume = _volume_reading(bucket.post_count, history_by_sector.get(bucket.sector, {}))
+        by_day = history_by_sector.get(bucket.sector, {})
+        volume = (_volume_reading(bucket.post_count, by_day) if volume_observed else
+                  VolumeReading(None, min(20, len(by_day)), VolumeFlag.NO_SOURCE_DATA))
         anchor = anchor_by_sector.get(bucket.sector)
         anchor_score = anchor.anchor_score if anchor is not None else None
         text_score = bucket.text_emotion_index

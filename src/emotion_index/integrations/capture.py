@@ -6,7 +6,8 @@ import base64
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterator, Mapping
 from uuid import uuid4
@@ -16,7 +17,7 @@ from emotion_index.domain.models import parse_utc_timestamp
 from emotion_index.integrations.providers.apewisdom import feeds as apewisdom_feeds
 from emotion_index.integrations.providers.bluesky import feeds as bluesky_feeds
 from emotion_index.integrations.providers.cn_anchor import feeds as cn_anchor_feeds
-from emotion_index.integrations.providers.http import Feed, Response
+from emotion_index.integrations.providers.http import XUEQIU_UNAUTHORIZED, Feed, Response
 from emotion_index.integrations.providers.rss_feeds import feeds as rss_feeds
 from emotion_index.integrations.providers.stocktwits import feeds as stocktwits_feeds
 from emotion_index.integrations.providers.us_anchor import feeds as us_anchor_feeds
@@ -26,6 +27,45 @@ from emotion_index.integrations.storage import atomic_publish_bytes
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def scheduled_session_date(market: Market) -> date | None:
+    # All deployed schedules occur on the same UTC and exchange calendar date.
+    day = utc_now().date()
+    closures = os.environ.get(f"EMOTION_INDEX_{market.value}_MARKET_HOLIDAYS", "")
+    holidays = {date.fromisoformat(value.strip()) for value in closures.split(",") if value.strip()}
+    return day if day.weekday() < 5 and day not in holidays else None
+
+
+@dataclass(frozen=True)
+class CaptureReceipt:
+    finished_at: datetime
+    flags: tuple[str, ...]
+
+
+def load_capture_receipts(raw_market: Path, market: Market, day: date) -> tuple[CaptureReceipt, ...]:
+    """Read sanitized capture outcomes including failures that produced no raw snapshot."""
+    receipts = []
+    for path in (raw_market / "_receipts" / day.isoformat()).glob("*.json"):
+        try:
+            document = json.loads(path.read_bytes())
+            if (document["schema_version"], document["market"], document["capture_date"]) != (
+                1, market.value, day.isoformat(),
+            ):
+                continue
+            start = parse_utc_timestamp(document["started_at"], "started_at")
+            finish = parse_utc_timestamp(document["finished_at"], "finished_at")
+            if start.date() != day or start > finish:
+                continue
+            flags = tuple(sorted({
+                XUEQIU_UNAUTHORIZED
+                for source in document["platforms"] if source["platform"] == "xueqiu"
+                for response in source["responses"] if response["reason"] == XUEQIU_UNAUTHORIZED
+            }))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
+            continue
+        receipts.append(CaptureReceipt(finish, flags))
+    return tuple(sorted(receipts, key=lambda receipt: receipt.finished_at))
 
 
 def _encode_response(response: Response) -> dict:

@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Iterator
 
 from emotion_index.domain.models import ObservationWindow, SocialPost, parse_utc_timestamp
 
@@ -47,15 +49,7 @@ def atomic_publish_html(target_path: Path, html_content: str) -> Path:
 
 def atomic_publish_bytes(target_path: Path, content: bytes) -> Path:
     """Publish a complete file without ever replacing a frozen identity."""
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = None
-    try:
-        with NamedTemporaryFile(dir=target_path.parent, prefix=f".{target_path.name}.", suffix=".tmp",
-                                delete=False) as stream:
-            tmp_path = Path(stream.name)
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
+    with _staged_file(target_path, content) as tmp_path:
         try:
             if os.name == "nt":
                 # Windows rename rejects an existing destination. POSIX rename replaces it.
@@ -70,7 +64,37 @@ def atomic_publish_bytes(target_path: Path, content: bytes) -> Path:
                 raise FileExistsError(
                     f"Artifact identity conflict at {target_path}: existing SHA-256 {previous} != new {requested}"
                 ) from None
+    return target_path
+
+
+@contextmanager
+def _staged_file(target_path: Path, content: bytes) -> Iterator[Path]:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = None
+    try:
+        with NamedTemporaryFile(dir=target_path.parent, prefix=f".{target_path.name}.", suffix=".tmp",
+                                delete=False) as stream:
+            tmp_path = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        yield tmp_path
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
-    return target_path
+
+
+def atomic_replace_bytes(target_path: Path, content: bytes) -> None:
+    with _staged_file(target_path, content) as tmp_path:
+        os.replace(tmp_path, target_path)
+
+
+def read_optional_bytes(path: Path) -> bytes | None:
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def remove_if_present(path: Path) -> None:
+    path.unlink(missing_ok=True)
